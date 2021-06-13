@@ -33,6 +33,29 @@ defmodule ExBanking.User do
     end
   end
 
+  @spec withdraw(user :: String.t(), amount :: number, currency :: String.t()) ::
+          {:ok, new_balance :: number}
+          | {:error,
+             :user_does_not_exist
+             | :not_enough_money
+             | :too_many_requests_to_user}
+
+  def withdraw(user, amount, currency) do
+    case GenServer.whereis(get_process_name(user)) do
+      nil ->
+        {:error, :user_does_not_exist}
+
+      pid ->
+        {:message_queue_len, mailbox_len} = Process.info(pid, :message_queue_len)
+
+        if mailbox_len <= @max_process_message do
+          GenServer.call(pid, {:withdraw, amount, currency})
+        else
+          {:error, :too_many_requests_to_user}
+        end
+    end
+  end
+
   @impl GenServer
   def init(balances) do
     {:ok, balances}
@@ -44,6 +67,19 @@ defmodule ExBanking.User do
     {:ok, amount} = Decimal.cast(amount)
     new_balance = Decimal.add(balance, amount)
     {:reply, {:ok, Decimal.to_float(new_balance)}, Map.put(balances, currency, new_balance)}
+  end
+
+  @impl GenServer
+  def handle_call({:withdraw, amount, currency}, _from, balances) do
+    balance = Map.get(balances, currency, Decimal.new(0))
+    {:ok, amount} = Decimal.cast(amount)
+
+    if Decimal.gt?(amount, balance) do
+      {:reply, {:error, :not_enough_money}, balances}
+    else
+      new_balance = Decimal.sub(balance, amount)
+      {:reply, {:ok, Decimal.to_float(new_balance)}, Map.put(balances, currency, new_balance)}
+    end
   end
 
   defp get_process_name(user) do
