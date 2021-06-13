@@ -4,7 +4,6 @@ defmodule ExBanking do
   """
 
   alias ExBanking.User
-  import ExBanking.Validator
 
   @doc """
   Creates a new user.
@@ -72,4 +71,47 @@ defmodule ExBanking do
       {:error, :wrong_arguments}
     end
   end
+
+  @doc """
+  Retrieve the balance for the given currency
+
+  ## Examples
+
+      iex> ExBanking.create_user("Dan")
+      iex> ExBanking.deposit("Dan", 100.00, "USD")
+      iex> ExBanking.get_balance("Dan", "USD")
+      {:ok, 100.0}
+
+  """
+  @spec get_balance(user :: String.t(), currency :: String.t()) ::
+          {:ok, balance :: number}
+          | {:error, :wrong_arguments | :user_does_not_exist | :too_many_requests_to_user}
+  def get_balance(user, currency) do
+    if is_valid_string?(user) && is_valid_string?(currency) do
+      User.get_balance(user, currency)
+    else
+      {:error, :wrong_arguments}
+    end
+  end
+
+  @spec is_valid_string?(binary()) :: boolean()
+  def is_valid_string?(value) when is_binary(value) do
+    String.trim(value) != ""
+  end
+
+  @spec is_valid_amount?(number()) :: boolean()
+  def is_valid_amount?(value) when is_number(value) do
+    value >= 0 && has_max_precision?(value)
+  end
+
+  defp has_max_precision?(number) when is_float(number) do
+    number
+    |> to_string()
+    |> String.split(".")
+    |> List.last()
+    |> String.length()
+    |> Kernel.<=(2)
+  end
+
+  defp has_max_precision?(_number), do: true
 end

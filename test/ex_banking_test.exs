@@ -1,7 +1,6 @@
 defmodule ExBankingTest do
   use ExUnit.Case, async: true
   doctest ExBanking
-  doctest ExBanking.Validator
 
   describe "create_user/1" do
     test "should create a user" do
@@ -93,6 +92,38 @@ defmodule ExBankingTest do
       :ok = ExBanking.create_user(user)
 
       pids = for _ <- 1..200, do: Task.async(fn -> ExBanking.withdraw(user, 200.00, "USD") end)
+
+      assert {:error, :too_many_requests_to_user} in Task.await_many(pids)
+    end
+  end
+
+  describe "get_balance/2" do
+    test "should return the balance for the given currency" do
+      user = unique_user()
+      :ok = ExBanking.create_user(user)
+      ExBanking.deposit(user, 100, "USD")
+
+      assert ExBanking.get_balance(user, "USD") == {:ok, 100.0}
+    end
+
+    test "should return wrong_arguments when given an invalid user or currency" do
+      user = unique_user()
+
+      assert ExBanking.get_balance("", "USD") == {:error, :wrong_arguments}
+      assert ExBanking.get_balance(user, "") == {:error, :wrong_arguments}
+    end
+
+    test "should return an error when the user is not created" do
+      user = unique_user()
+
+      assert ExBanking.get_balance(user, "USD") == {:error, :user_does_not_exist}
+    end
+
+    test "should not allow more than 10 operations at the same time" do
+      user = unique_user()
+      :ok = ExBanking.create_user(user)
+
+      pids = for _ <- 1..200, do: Task.async(fn -> ExBanking.get_balance(user, "USD") end)
 
       assert {:error, :too_many_requests_to_user} in Task.await_many(pids)
     end
