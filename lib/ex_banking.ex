@@ -94,13 +94,70 @@ defmodule ExBanking do
     end
   end
 
+  @doc """
+  Send money from one user to another
+
+  ## Examples
+
+      iex> ExBanking.create_user("Esther")
+      iex> ExBanking.create_user("Fernando")
+      iex> ExBanking.deposit("Esther", 100.00, "USD")
+      iex> ExBanking.send("Esther", "Fernando", 100, "USD")
+      {:ok, 0.0, 100.0}
+
+  """
+  @spec send(
+          from_user :: String.t(),
+          to_user :: String.t(),
+          amount :: number,
+          currency :: String.t()
+        ) ::
+          {:ok, from_user_balance :: number, to_user_balance :: number}
+          | {:error,
+             :wrong_arguments
+             | :not_enough_money
+             | :sender_does_not_exist
+             | :receiver_does_not_exist
+             | :too_many_requests_to_sender
+             | :too_many_requests_to_receiver}
+  def send(from_user, to_user, amount, currency)
+      when is_binary(from_user) and is_binary(to_user) and is_number(amount) and
+             is_binary(currency) do
+    if is_valid_string?(from_user) && is_valid_string?(to_user) && is_valid_amount?(amount) &&
+         is_valid_string?(currency) do
+      with {:sender, {:ok, sender_balance}} <-
+             {:sender, User.withdraw(from_user, amount, currency)},
+           {:receiver, {:ok, receiver_balance}} <-
+             {:receiver, User.deposit(to_user, amount, currency)} do
+        {:ok, sender_balance, receiver_balance}
+      else
+        {:sender, {:error, :not_enough_money}} ->
+          {:error, :not_enough_money}
+
+        {:sender, {:error, :user_does_not_exist}} ->
+          {:error, :sender_does_not_exist}
+
+        {:sender, {:error, :too_many_requests_to_user}} ->
+          {:error, :too_many_requests_to_sender}
+
+        {:receiver, {:error, :user_does_not_exist}} ->
+          {:error, :receiver_does_not_exist}
+
+        {:receiver, {:error, :too_many_requests_to_user}} ->
+          {:error, :too_many_requests_to_receiver}
+      end
+    else
+      {:error, :wrong_arguments}
+    end
+  end
+
   @spec is_valid_string?(binary()) :: boolean()
-  def is_valid_string?(value) when is_binary(value) do
+  defp is_valid_string?(value) when is_binary(value) do
     String.trim(value) != ""
   end
 
   @spec is_valid_amount?(number()) :: boolean()
-  def is_valid_amount?(value) when is_number(value) do
+  defp is_valid_amount?(value) when is_number(value) do
     value >= 0 && has_max_precision?(value)
   end
 
